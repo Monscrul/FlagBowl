@@ -1,0 +1,90 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/field/field.tscn" id="1_field"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/camera/horizontal_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://scripts/match/match.gd" id="4_match"]
+[ext_resource type="Script" path="res://scripts/routes/receiver_route.gd" id="5_route"]
+[ext_resource type="PackedScene" path="res://scenes/ball/football.tscn" id="6_ball"]
+[ext_resource type="PackedScene" path="res://scenes/defense/defender.tscn" id="7_defender"]
+[ext_resource type="Script" path="res://scripts/match/match_hud.gd" id="8_hud"]
+
+[node name="Match" type="Node2D"]
+script = ExtResource("4_match")
+
+[node name="Field" parent="." instance=ExtResource("1_field")]
+z_index = -1
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+position = Vector2(440, 180)
+
+[node name="ReceiverOne" parent="." instance=ExtResource("2_player")]
+position = Vector2(490, 100)
+control_enabled = false
+max_speed = 105.0
+jersey_color = Color(0.9, 0.58, 0.24, 1)
+role_name = "R1"
+
+[node name="Route" type="Node" parent="ReceiverOne"]
+script = ExtResource("5_route")
+waypoint_offsets = PackedVector2Array(110, 0, 190, 65, 290, 65)
+
+[node name="ReceiverTwo" parent="." instance=ExtResource("2_player")]
+position = Vector2(490, 260)
+control_enabled = false
+max_speed = 105.0
+jersey_color = Color(0.9, 0.58, 0.24, 1)
+role_name = "R2"
+
+[node name="Route" type="Node" parent="ReceiverTwo"]
+script = ExtResource("5_route")
+waypoint_offsets = PackedVector2Array(80, 0, 150, -65, 230, -65)
+
+[node name="Football" parent="." instance=ExtResource("6_ball")]
+
+[node name="DefenderOne" parent="." instance=ExtResource("7_defender")]
+position = Vector2(580, 80)
+role_name = "D1"
+
+[node name="DefenderTwo" parent="." instance=ExtResource("7_defender")]
+position = Vector2(580, 280)
+role_name = "D2"
+
+[node name="DefenderThree" parent="." instance=ExtResource("7_defender")]
+position = Vector2(640, 180)
+role_name = "D3"
+
+[node name="DefenderFour" parent="." instance=ExtResource("7_defender")]
+position = Vector2(730, 120)
+role_name = "D4"
+
+[node name="DefenderFive" parent="." instance=ExtResource("7_defender")]
+position = Vector2(730, 240)
+role_name = "D5"
+
+[node name="Camera2D" type="Camera2D" parent="." node_paths=PackedStringArray("target")]
+position = Vector2(440, 180)
+position_smoothing_enabled = false
+script = ExtResource("3_camera")
+target = NodePath("../Player")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("8_hud")
+
+[node name="Scoreboard" type="Label" parent="HUD"]
+offset_left = 12.0
+offset_top = 3.0
+offset_right = 628.0
+offset_bottom = 38.0
+theme_override_font_sizes/font_size = 12
+mouse_filter = 2
+
+[node name="Controls" type="Label" parent="HUD"]
+offset_left = 12.0
+offset_top = 325.0
+offset_right = 628.0
+offset_bottom = 360.0
+theme_override_colors/font_color = Color(0.85, 0.93, 0.86, 1)
+theme_override_font_sizes/font_size = 12
+text = "FLAG BOWL  /  MILESTONE 1                                      WASD: MOVE"
+mouse_filter = 2

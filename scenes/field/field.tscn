@@ -1,0 +1,32 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/field/field.gd" id="1_field"]
+
+[sub_resource type="RectangleShape2D" id="Shape_horizontal"]
+size = Vector2(1440, 20)
+
+[sub_resource type="RectangleShape2D" id="Shape_vertical"]
+size = Vector2(20, 280)
+
+[node name="Field" type="Node2D"]
+script = ExtResource("1_field")
+
+[node name="Boundaries" type="StaticBody2D" parent="."]
+collision_layer = 1
+collision_mask = 2
+
+[node name="Top" type="CollisionShape2D" parent="Boundaries"]
+position = Vector2(740, 30)
+shape = SubResource("Shape_horizontal")
+
+[node name="Bottom" type="CollisionShape2D" parent="Boundaries"]
+position = Vector2(740, 330)
+shape = SubResource("Shape_horizontal")
+
+[node name="Left" type="CollisionShape2D" parent="Boundaries"]
+position = Vector2(30, 180)
+shape = SubResource("Shape_vertical")
+
+[node name="Right" type="CollisionShape2D" parent="Boundaries"]
+position = Vector2(1450, 180)
+shape = SubResource("Shape_vertical")

@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/abilities/athlete_abilities.gd" id="2_abilities"]
+
+[sub_resource type="CircleShape2D" id="Circle_player"]
+radius = 8.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 1
+motion_mode = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("Circle_player")
+
+[node name="Abilities" type="Node" parent="."]
+script = ExtResource("2_abilities")
