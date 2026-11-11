@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="OffensivePlay" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/playbook/offensive_play.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Slants"
+description = "Quick inside breaks. Throw early before the coverage closes."
+receiver_one_route = PackedVector2Array(55, 0, 160, 65, 250, 65)
+receiver_two_route = PackedVector2Array(55, 0, 160, -65, 250, -65)
+ai_read_delay = 0.3

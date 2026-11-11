@@ -34,6 +34,9 @@ func key_press(code: Key) -> void:
 
 func run_checks() -> void:
 	match_scene = load("res://scenes/match/match.tscn").instantiate()
+	# Isolate legacy manual progression; playbook tests cover default AI/auto flow.
+	match_scene.opponent_enabled = false
+	match_scene.auto_flow_enabled = false
 	match_scene.defense_enabled = false
 	root.add_child(match_scene)
 	current_scene = match_scene

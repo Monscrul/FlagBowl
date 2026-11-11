@@ -1,4 +1,4 @@
-# Flag Bowl — Deterministic Match Prototype
+# Flag Bowl — Playable Match Prototype
 
 Open `project.godot` in Godot 4.7.x and press **F5**. No plugins or external art are required.
 
@@ -8,14 +8,15 @@ The game renders at 640×360 with nearest filtering and pixel snapping. Fraction
 
 | Input | Behavior |
 | --- | --- |
+| 1–5 / play buttons | Select Cross, Slants, Outs, Curls, or Streaks before a Blue snap |
 | WASD | Move the selected athlete during live play |
 | Mouse / left-click | Aim / throw while controlling the QB with possession |
-| Enter before snap | Snap and start routes, defense, and clock |
-| Enter after dead ball | Prepare the next formation or enter possession change |
-| Enter during possession change | Confirm the new team and prepare its first snap |
+| Enter before snap | Snap Blue's selected play; Red snaps automatically |
+| Enter after dead ball | Skip the automatic between-play delay |
+| Enter during possession change | Skip the automatic possession-change delay |
 | Enter during live play | Ignored; cannot undo a down or reset the clock |
-| Tab | Select D1, cycle through D5, then wrap |
-| Q | Return to the offensive carrier, or QB during flight |
+| Tab on defensive possessions | Switch Blue defenders D1–D5 while Red runs its offense |
+| Q on Blue possessions | Return to the offensive carrier; cannot take over the Red QB |
 | Shift | Sprint at 1.45× speed |
 | Space while moving with the ball | Juke: 0.18-second dash/protection, 1.2-second cooldown |
 | R at GAME_OVER | Start a new match |
@@ -34,9 +35,26 @@ A yellow ring marks the selected athlete. A cyan ring marks juke protection. The
 - Incomplete and out-of-bounds passes consume a down and retain the original LOS. A carrier running out of bounds consumes a down and advances/retreats the LOS to the exit spot.
 - A carrier's **center** reaching the opponent goal line in bounds scores. At an exact sideline/goal-line corner, out of bounds takes priority. A valid touchdown takes priority over a simultaneous flag pull. Turnover/LOS spots are clamped to the open field between goal lines.
 - The default game clock is five minutes, configurable as `game_duration_seconds` on Match. It advances by one integer tick per physics frame only in LIVE_PLAY. At zero, the current play can finish; its score counts, then the game ends. Ties remain ties.
-- Enter advances between plays. A turnover is shown first in DEAD_BALL, then POSSESSION_CHANGE; another Enter prepares PRE_SNAP, and another snaps. There is no free live-play reset.
+- DEAD_BALL advances automatically after 1.2 seconds. A turnover passes through POSSESSION_CHANGE for 1 second. Enter can skip those delays. Blue waits in PRE_SNAP for play selection and Enter; Red calls a play and snaps after 1.5 seconds. There is no free live-play reset.
+- A live play lasts at most 20 seconds, including time after the game clock reaches zero. The limit spots a held ball, or treats an airborne pass as incomplete, and consumes a down. This guarantees that a stalled final play can finish.
 
-Both teams reuse the existing offensive actors (QB and two receivers) and five defensive actors in their current roles. Team colors and attack directions swap with possession; this prototype does not yet expand the offensive roster to five or simulate an autonomous opposing QB.
+Blue is the human team and Red is the AI opponent. Teams reuse the existing offensive actors (QB and two receivers) and five defensive actors in their current roles. Colors and attack directions swap with possession. Red owns its QB and receivers; the human owns a Blue defender and may switch with Tab. On Blue offense, the human controls the QB and automatically takes over a catcher. The offensive roster is still three athletes; this milestone does not add two more offensive players.
+
+## Five-play Resource playbook
+
+| Key | Play | Route idea |
+| --- | --- | --- |
+| 1 | Cross | Staggered crossing routes through the middle |
+| 2 | Slants | Quick inside breaks |
+| 3 | Outs | Upfield stems, then breaks toward the sidelines |
+| 4 | Curls | Sell deep, turn back, and settle |
+| 5 | Streaks | Two vertical routes |
+
+The five `.tres` assets live in `resources/playbook/`; `default_playbook.tres` is an `OffensivePlaybook` containing five `OffensivePlay` Resources. Each play exports a name, description, two waypoint arrays, and an AI read delay. Edit these assets in the Inspector to author routes. Waypoints are pixel offsets relative to receiver start positions; positive x is upfield and is mirrored automatically for Red. The default Cross retains the original prototype's routes.
+
+Keys 1–5 or the pre-snap buttons update the formation preview. The current human selection persists into later Blue formations and may be changed before every snap. Selection is locked during live play and Red possessions. Runtime route arrays are copied, so running or editing a match cannot mutate a shared Resource. Invalid exported books fall back to the validated default before UI initialization.
+
+Red cycles through the five calls deterministically across possessions. Its QB uses the play's read delay, estimates throw arrival positions from receiver velocity, and evaluates range, defender separation, lane clearance, and forward progress. With no safe read after 1.4 seconds, it scrambles; an open read can still produce a later pass. After a catch, the AI moves the carrier upfield and chooses lanes with more space. The QB, routes, and carrier operate automatically without taking control away from the human defender. This is a simple deterministic prototype AI, with no external dependencies.
 
 ## Field coordinates
 
@@ -63,6 +81,10 @@ Each formation places the QB 40 pixels behind the LOS and receivers on it. Defen
 - `scripts/match/match.gd`: scene adapter for input, ball/AI events, carrier goal/sideline checks, and formation application. It has no duplicate gameplay-phase enum or separate score/down/clock fields. `ball.holder`/`in_flight` distinguish running, catching, and passing within LIVE_PLAY.
 - `scripts/match/formation.gd`: applies mirrored formation positions and team colors from rules.
 - `scripts/match/match_hud.gd`: read-only scoreboard and control/status display.
+- `scripts/match/match_flow.gd`: fixed-tick between-play pacing and opposing automatic snaps.
+- `scripts/playbook/offensive_play.gd`, `offensive_playbook.gd`: reusable typed play authoring Resources.
+- `scripts/playbook/play_selection.gd`: human pre-snap buttons, selected-call description, and selection highlighting.
+- `scripts/offense/opposing_offense.gd`: opponent passing decisions, lead targets, scramble fallback, and carrier movement. It emits `decision_made`.
 - `scripts/field/field.gd`, `scenes/field/field.tscn`: field coordinates, placeholder drawing, and four physical walls.
 - `scripts/player/player.gd`, `scenes/player/player.tscn`: reusable CharacterBody2D movement and control selection.
 - `scripts/abilities/athlete_abilities.gd`: sprint/juke component, duration, cooldown, and protection.
@@ -80,21 +102,20 @@ The phase flow is PRE_SNAP → LIVE_PLAY → DEAD_BALL → PRE_SNAP for ordinary
 
 Passes travel straight at 400 pixels/second with a 420-pixel maximum range and a 14-pixel catch radius. Lead receivers early; D3 rushes after 1.5 seconds. D1/D2 cover R1/R2, and D4/D5 bracket them from deeper cushions. Defenders within 145 pixels react to an airborne pass; after a catch they pursue the carrier.
 
-Swept pass detection considers offense and defense together. The first athlete along the segment catches; exact ties favor defense. Interceptions end the play and schedule possession change; there are no interception returns. Manual defender selection persists through an offensive catch; Q returns to the receiver. Throw first, then Tab to defend the pass; a QB is not autonomous when you select defense.
+Swept pass detection considers offense and defense together. The first athlete along the segment catches; exact ties favor defense. Interceptions end the play and schedule possession change; there are no interception returns. On Blue offense, a catch transfers control to its receiver. On Red offense, a catch keeps the human on the selected Blue defender. Tab changes only the human defender; neither Tab nor Q can take over a Red athlete during a live play.
 
 A defender within 18 pixels automatically pulls the carrier's flag unless a juke protects it. Flag pulls stop the play exactly once. Jukes require live possession and movement, do not stack with sprint, and respect walls. Speeds, radii, reaction range, route points, and ability timings are editable exports.
 
 ## Manual verification
 
-1. Press F5. Confirm 0–0, 05:00, PRE_SNAP, 1/4, 15 yards to midfield, and both LOS/target markers. WASD should not move the pre-snap formation.
-2. Press Enter. Confirm clock, receiver routes, and defense start. Test WASD, sprint, juke, Tab cycling, Q, mouse aim, and throws. Enter during live play must not reset anything.
-3. Throw into empty grass. Confirm an incomplete consumes one down, retains the LOS, and stops the clock. Enter should place a new formation at that LOS; Enter again snaps. Four incompletes should show turnover on downs, then possession-change and mirrored formations after Enter.
-4. Run/catch past midfield and let a defender pull the flag. Confirm first down, four downs to score, updated LOS, and the target marker at the opponent goal. Losing and regaining midfield must not grant more downs.
-5. Reach either opponent end zone with a carrier or reception. Confirm six points exactly once and frozen play. Advance possession and verify the opponent's own-10 start, reversed route/defensive movement, swapped colors, and camera target.
-6. Throw through a defender. Confirm interception, dead-ball result, next team at the interception spot (or touchback for its own end zone), first down, and cleared old ball candidates/routes after formation placement.
-7. Run into a sideline. Confirm a reachable physical boundary ends the play and spots the ball there. Throw out of bounds and confirm the LOS stays unchanged. Verify a short-of-goal stop does not score.
-8. For a quick clock check, set Match's `game_duration_seconds` to 5 in the Inspector. Clock must pause between plays. Once it reaches zero during a live play, finish the play: its touchdown can count, then GAME_OVER must freeze input and display a winner or tie. Enter must not restart it; R should create a clean game. Restore 300 after testing.
-9. Resize to 1278×719 and other sizes; confirm 16:9 fitting, readable HUD, and mouse/world aiming alignment. Inspect the Godot Debugger for errors.
+1. Press F5. Confirm 0–0, 05:00, Blue own-ten, PRE_SNAP, the scoreboard/field markers, and five play buttons. Select each play using both keys and buttons; verify the route previews and descriptions change. Pre-snap movement remains locked.
+2. Choose a play and press Enter. Run, sprint, juke, aim, and throw. Selection buttons should disappear and keys 1–5 must not alter the live routes. Tab must not take over Red defenders while Blue has possession.
+3. Finish a play with a catch/run, flag pull, incompletion, or sideline exit. Watch the automatic dead-ball delay and new formation. Confirm the call can be changed before the next snap, LOS/down update correctly, and a miss retains LOS.
+4. Complete a drive or turn the ball over. Wait through the automatic possession change: Red should call and snap its own play while the human selects a Blue defender. No debugger commands or manual possession edits are needed.
+5. Use Tab to cycle D1–D5 and WASD/Shift to defend. Confirm Red's QB makes passes or scrambles, receivers follow mirrored routes, and a catcher runs toward the left goal. Q and mouse clicks must not control Red's offense. A catch must leave the human controlling a defender.
+6. Pull a flag, intercept, or allow a score. Confirm the correct dead-ball spot, downs, score, and next possession. Four downs without the target must turn the ball over. Red's next snap is automatic; Blue's next snap waits for a play call and Enter.
+7. Play to 00:00. The current play may finish, with a maximum 20-second live duration. Confirm GAME_OVER, a stable final score/winner or tie, frozen movement/flight, and R restarting with Blue, Cross, and 05:00. For a quicker manual run, temporarily set Match's `game_duration_seconds` to 30 in the Inspector, then restore 300.
+8. Resize the window and test mouse aiming/UI button alignment. Inspect the Godot Debugger for errors.
 
 ## Automated validation
 
@@ -108,10 +129,14 @@ godot --headless --path . --fixed-fps 60 --script res://tests/match_integration_
 godot --headless --path . --fixed-fps 60 --script res://tests/milestone_1_check.gd
 godot --headless --path . --fixed-fps 60 --script res://tests/offense_check.gd
 godot --headless --path . --fixed-fps 60 --script res://tests/defense_check.gd
+godot --headless --path . --fixed-fps 60 --script res://tests/playbook_check.gd
+godot --headless --path . --fixed-fps 60 --script res://tests/full_match_check.gd
 ```
 
-Godot 4.7.2 validation: 108 pure rule checks, 46 match integration checks, 26 movement checks, 41 offensive checks, and 64 defensive checks pass (285 total). Tests exit nonzero on failed assertions. Coverage includes mirrored scores, fourth-down midfield qualification, duplicate outcomes, interception spots/touchbacks, own-end-zone turnovers, boundary corners, deterministic clock replay, last-play scoring, formation/route resets, scoreboard state, and real passing/defense interactions.
+Godot 4.7.2 validation: 113 rule checks, 46 match integration checks, 26 movement checks, 41 offensive checks, 64 defensive checks, 67 playbook/AI checks, and 11 full-match checks pass (368 total). Tests exit nonzero on failed assertions. Coverage includes shared Resource isolation, all five calls and routes, input/UI selection guards, mirrored formations, QB reads/covered-lane decisions, AI catches and running, human defensive control, scoring/turnovers, live-limit expiry, and restart.
 
-Regression fixtures explicitly restart matches and isolate the original player/route layout where needed; the match integration suite verifies the real LOS-based formation and phase transitions. Movement checks unlock their fixture before the snap to exercise collisions independently. Gameplay input cannot perform those fixture resets.
+`full_match_check.gd` runs the default five-minute live game clock from the kickoff-equivalent own-ten start to GAME_OVER. Its driver uses only play-selection, snap, throw, movement, sprint, and Tab inputs while default defense, AI, and automatic flow remain enabled. It never teleports actors, injects scores/results, edits possession/clock fields, or manually advances between plays. The completed run included 290 human snaps, 105 AI snaps/passes, and 20 AI catches. It verifies the final score display, stopped gameplay, and R restart. This checks completion and integration; game balance still uses placeholder prototype tuning.
+
+Older regression fixtures disable automatic flow/opponent ownership where they isolate the prior manual phase behavior; the playbook and full-match suites exercise the production defaults. Movement fixtures unlock pre-snap movement solely to test collision geometry. Gameplay input cannot perform those fixture resets.
 
 Headless import/parse and startup checks are run separately. The restricted environment emits a macOS certificate-access error and blocks writing global editor settings; no project script/scene/runtime errors appeared in passing checks. Desktop visuals and physical keyboard/mouse behavior still require manual verification.

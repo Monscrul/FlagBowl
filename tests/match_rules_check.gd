@@ -141,6 +141,24 @@ func run_checks() -> void:
 	check(rules.phase == MatchRules.Phase.GAME_OVER and rules.ticks_remaining == 0 and rules.ticks_per_second == 1, "invalid duration/tick rate clamped safely")
 	var first_run: String = deterministic_sequence()
 	check(first_run == deterministic_sequence(), "same events and physics ticks produce identical match state")
+	rules.start_game(60, 1)
+	rules.snap()
+	for tick: int in range(20):
+		rules.tick(Vector2(600, 180))
+	check(rules.phase == MatchRules.Phase.DEAD_BALL and rules.down == 2 and rules.line_of_scrimmage == 600, "live limit consumes down at carrier spot")
+	check(rules.seconds_remaining() == 40 and rules.last_result == "PLAY LIMIT / DEAD BALL", "live limit uses fixed ticks and preserves remaining game time")
+	rules.tick(Vector2(900, 180))
+	check(rules.line_of_scrimmage == 600 and rules.down == 2, "expired live limit cannot apply another result during dead ball")
+	rules.start_game(60, 1)
+	rules.snap()
+	for tick: int in range(20):
+		rules.tick()
+	check(rules.last_result == "INCOMPLETE / DROP" and rules.line_of_scrimmage == 440 and rules.down == 2, "airborne live-limit expiry is incomplete at original LOS")
+	rules.start_game(1, 1)
+	rules.snap()
+	for tick: int in range(20):
+		rules.tick(Vector2(1240, 180))
+	check(rules.phase == MatchRules.Phase.GAME_OVER and rules.scores == [6, 0], "timeout goal-line result still scores before final")
 	print("Rules checks: ", checks, "; failures: ", failures)
 	quit(1 if failures else 0)
 

@@ -7,9 +7,15 @@ signal possession_changed(carrier: FlagPlayer)
 signal play_ended(reason: String)
 signal control_changed(athlete: FlagPlayer)
 signal flag_pulled(defender: FlagPlayer, carrier: FlagPlayer)
+signal play_selected(play: OffensivePlay)
+
+const DEFAULT_PLAYBOOK: OffensivePlaybook = preload("res://resources/playbook/default_playbook.tres")
 
 @export var defense_enabled: bool = true
 @export_range(0, 3600) var game_duration_seconds: int = 300
+@export var playbook: OffensivePlaybook = DEFAULT_PLAYBOOK
+@export var opponent_enabled: bool = true
+@export var auto_flow_enabled: bool = true
 
 var rules: MatchRules = MatchRules.new()
 var controlled_player: FlagPlayer
@@ -18,11 +24,22 @@ var routes: Array[ReceiverRoute] = []
 var defenders: Array[FlagPlayer] = []
 var defensive_brains: Array[DefenderAI] = []
 var _defender_index: int = -1
+var human_play_index: int = 0
+var _ai_play_index: int = 0
+var _ai_snap_count: int = 0
 
 @onready var quarterback: FlagPlayer = $Player
 @onready var ball: Football = $Football
 @onready var camera: Camera2D = $Camera2D
 @onready var status: Label = $HUD/Controls
+@onready var opposing_offense: OpposingOffense = $OpposingOffense
+@onready var flow: Node = $MatchFlow
+
+
+func _enter_tree() -> void:
+	# Validate before the selection UI's _ready reads the resource.
+	if playbook == null or not playbook.is_valid():
+		playbook = DEFAULT_PLAYBOOK
 
 
 func _ready() -> void:
@@ -44,6 +61,11 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	for index: int in range(5):
+		if event.is_action_pressed("select_play_%d" % (index + 1)) and not event.is_echo():
+			select_play(index)
+			get_viewport().set_input_as_handled()
+			return
 	if event.is_action_pressed("snap") and not event.is_echo():
 		if rules.phase == MatchRules.Phase.PRE_SNAP:
 			snap_play()
@@ -65,6 +87,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func restart_match() -> void:
+	human_play_index = 0
+	_ai_play_index = 0
+	_ai_snap_count = 0
 	rules.start_game(game_duration_seconds, Engine.physics_ticks_per_second)
 	reset_play()
 
@@ -79,6 +104,8 @@ func advance_play() -> bool:
 func snap_play() -> void:
 	if not rules.snap():
 		return
+	if is_ai_offense():
+		_ai_snap_count += 1
 	for athlete: FlagPlayer in _all_athletes():
 		athlete.play_active = true
 		athlete.movement_locked = false
@@ -88,7 +115,19 @@ func snap_play() -> void:
 
 
 func throw_at(world_position: Vector2) -> bool:
-	if rules.phase != MatchRules.Phase.LIVE_PLAY or controlled_player != quarterback:
+	if is_ai_offense() or controlled_player != quarterback:
+		return false
+	return _launch_pass(world_position)
+
+
+func request_ai_throw(world_position: Vector2) -> bool:
+	if not is_ai_offense():
+		return false
+	return _launch_pass(world_position)
+
+
+func _launch_pass(world_position: Vector2) -> bool:
+	if rules.phase != MatchRules.Phase.LIVE_PLAY:
 		return false
 	# Ball state distinguishes a held ball, a pass in flight, and a catch.
 	if ball.holder != quarterback:
@@ -102,12 +141,35 @@ func throw_at(world_position: Vector2) -> bool:
 	return true
 
 
+func is_ai_offense() -> bool:
+	return opponent_enabled and rules.offense == 1
+
+
+func selected_play() -> OffensivePlay:
+	return playbook.plays[_ai_play_index if is_ai_offense() else human_play_index]
+
+
+func select_play(index: int) -> bool:
+	if rules.phase != MatchRules.Phase.PRE_SNAP or is_ai_offense() or index < 0 or index >= playbook.plays.size():
+		return false
+	human_play_index = index
+	reset_play()
+	play_selected.emit(selected_play())
+	return true
+
+
 func reset_play() -> void:
 	# Formation placement cannot reset a live play or undo a down.
 	if rules.phase not in [MatchRules.Phase.PRE_SNAP, MatchRules.Phase.POSSESSION_CHANGE, MatchRules.Phase.GAME_OVER]:
 		return
 	_freeze_athletes()
 	MatchFormation.arrange(rules, quarterback, receivers, defenders, routes)
+	_ai_play_index = _ai_snap_count % playbook.plays.size()
+	var play: OffensivePlay = selected_play()
+	routes[0].waypoint_offsets = play.receiver_one_route.duplicate()
+	routes[1].waypoint_offsets = play.receiver_two_route.duplicate()
+	opposing_offense.reset()
+	flow.reset()
 	var direction: int = rules.attack_direction()
 	var offsets: Array[Vector2] = [Vector2(32, -12), Vector2(32, 12), Vector2.ZERO, Vector2(95, 25), Vector2(95, -25)]
 	for index: int in range(defensive_brains.size()):
@@ -119,7 +181,11 @@ func reset_play() -> void:
 		athlete.has_ball = false
 	_defender_index = -1
 	ball.possess(quarterback)
-	_set_control(quarterback)
+	if is_ai_offense():
+		_defender_index = 0
+		_set_control(defenders[0])
+	else:
+		_set_control(quarterback)
 	possession_changed.emit(quarterback)
 
 
@@ -155,12 +221,14 @@ func _set_control(athlete: FlagPlayer) -> void:
 func switch_defender() -> void:
 	if not defense_enabled or rules.phase not in [MatchRules.Phase.PRE_SNAP, MatchRules.Phase.LIVE_PLAY]:
 		return
+	if opponent_enabled and not is_ai_offense():
+		return
 	_defender_index = (_defender_index + 1) % defenders.size()
 	_set_control(defenders[_defender_index])
 
 
 func select_offense() -> void:
-	if rules.phase not in [MatchRules.Phase.PRE_SNAP, MatchRules.Phase.LIVE_PLAY]:
+	if is_ai_offense() or rules.phase not in [MatchRules.Phase.PRE_SNAP, MatchRules.Phase.LIVE_PLAY]:
 		return
 	_defender_index = -1
 	_set_control(ball.holder if ball.holder != null else quarterback)
@@ -172,7 +240,7 @@ func _on_caught(receiver: FlagPlayer) -> void:
 	for route: ReceiverRoute in routes:
 		route.stop()
 	receiver.velocity = Vector2.ZERO
-	if not defenders.has(controlled_player):
+	if not is_ai_offense() and not defenders.has(controlled_player):
 		_set_control(receiver)
 	possession_changed.emit(receiver)
 	_resolve_carrier()
@@ -209,10 +277,14 @@ func _on_flag_pull_requested(defender: FlagPlayer, carrier: FlagPlayer) -> void:
 func _end_play(result: MatchRules.Result, spot: Vector2) -> bool:
 	if not rules.finish_play(result, spot):
 		return false
+	_finish_scene_play()
+	return true
+
+
+func _finish_scene_play() -> void:
 	_freeze_athletes()
 	status.text = rules.last_result
 	play_ended.emit(rules.last_result)
-	return true
 
 
 func _resolve_carrier() -> bool:
@@ -227,8 +299,12 @@ func _resolve_carrier() -> bool:
 
 
 func _physics_process(_delta: float) -> void:
-	rules.tick()
-	_resolve_carrier()
+	if _resolve_carrier() or rules.phase != MatchRules.Phase.LIVE_PLAY:
+		return
+	var spot: Vector2 = ball.holder.global_position if ball.holder != null else Vector2(INF, INF)
+	rules.tick(spot)
+	if rules.phase != MatchRules.Phase.LIVE_PLAY:
+		_finish_scene_play()
 
 
 func _process(_delta: float) -> void:

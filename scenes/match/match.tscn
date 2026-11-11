@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/field/field.tscn" id="1_field"]
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
@@ -8,9 +8,18 @@
 [ext_resource type="PackedScene" path="res://scenes/ball/football.tscn" id="6_ball"]
 [ext_resource type="PackedScene" path="res://scenes/defense/defender.tscn" id="7_defender"]
 [ext_resource type="Script" path="res://scripts/match/match_hud.gd" id="8_hud"]
+[ext_resource type="Script" path="res://scripts/offense/opposing_offense.gd" id="9_offense"]
+[ext_resource type="Script" path="res://scripts/match/match_flow.gd" id="10_flow"]
+[ext_resource type="Script" path="res://scripts/playbook/play_selection.gd" id="11_selection"]
 
 [node name="Match" type="Node2D"]
 script = ExtResource("4_match")
+
+[node name="OpposingOffense" type="Node" parent="."]
+script = ExtResource("9_offense")
+
+[node name="MatchFlow" type="Node" parent="."]
+script = ExtResource("10_flow")
 
 [node name="Field" parent="." instance=ExtResource("1_field")]
 z_index = -1
@@ -27,7 +36,6 @@ role_name = "R1"
 
 [node name="Route" type="Node" parent="ReceiverOne"]
 script = ExtResource("5_route")
-waypoint_offsets = PackedVector2Array(110, 0, 190, 65, 290, 65)
 
 [node name="ReceiverTwo" parent="." instance=ExtResource("2_player")]
 position = Vector2(490, 260)
@@ -38,7 +46,6 @@ role_name = "R2"
 
 [node name="Route" type="Node" parent="ReceiverTwo"]
 script = ExtResource("5_route")
-waypoint_offsets = PackedVector2Array(80, 0, 150, -65, 230, -65)
 
 [node name="Football" parent="." instance=ExtResource("6_ball")]
 
@@ -70,6 +77,13 @@ target = NodePath("../Player")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("8_hud")
+
+[node name="PlaySelection" type="PanelContainer" parent="HUD"]
+offset_left = 30.0
+offset_top = 42.0
+offset_right = 610.0
+offset_bottom = 100.0
+script = ExtResource("11_selection")
 
 [node name="Scoreboard" type="Label" parent="HUD"]
 offset_left = 12.0

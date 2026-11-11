@@ -16,15 +16,15 @@ func _process(_delta: float) -> void:
 	var hint: String
 	match rules.phase:
 		MatchRules.Phase.PRE_SNAP:
-			hint = "ENTER: SNAP"
+			hint = "DEFEND | AI SNAP SOON" if director.is_ai_offense() else "1-5: SELECT | ENTER: SNAP"
 		MatchRules.Phase.LIVE_PLAY:
-			hint = "CLICK: THROW" if director.ball.holder == director.quarterback else "PASS / RUN"
+			hint = "DEFEND RED OFFENSE" if director.is_ai_offense() else ("CLICK: THROW" if director.ball.holder == director.quarterback else "PASS / RUN")
 			if rules.ticks_remaining == 0:
 				hint += " | FINAL PLAY"
 		MatchRules.Phase.GAME_OVER:
 			hint = "FINAL: " + ("TIE" if rules.scores[0] == rules.scores[1] else ("BLUE WINS" if rules.scores[0] > rules.scores[1] else "RED WINS")) + " | R: NEW GAME"
 		_:
-			hint = "ENTER: " + ("CHANGE POSSESSION" if rules.pending_possession else "NEXT FORMATION")
+			hint = "NEXT PLAY SOON | ENTER: SKIP"
 	var abilities: AthleteAbilities = director.controlled_player.get_node("Abilities")
 	controls.text = (rules.last_result + " | " if not rules.last_result.is_empty() else "") + hint
-	controls.text += "\n%s | WASD | SHIFT: SPRINT | SPACE: JUKE %.1f | TAB: DEF | Q: OFF" % [director.controlled_player.role_name, abilities.cooldown_remaining]
+	controls.text += "\n%s | %s | WASD SHIFT SPACE(%.1f) | TAB: DEF%s" % [director.controlled_player.role_name, director.selected_play().display_name, abilities.cooldown_remaining, "" if director.is_ai_offense() else " | Q: OFF"]

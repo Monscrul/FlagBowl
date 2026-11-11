@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="OffensivePlay" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/playbook/offensive_play.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Streaks"
+description = "Two vertical routes. Lead the receiver with room ahead."
+receiver_one_route = PackedVector2Array(130, 0, 300, 0, 420, 0)
+receiver_two_route = PackedVector2Array(130, 0, 280, 0, 400, 0)
+ai_read_delay = 0.5

@@ -6,11 +6,12 @@ signal changed
 signal phase_changed(previous: Phase, current: Phase)
 
 enum Phase { PRE_SNAP, LIVE_PLAY, DEAD_BALL, POSSESSION_CHANGE, GAME_OVER }
-enum Result { FLAG_PULL, OUT_OF_BOUNDS, INCOMPLETE, INTERCEPTION, TOUCHDOWN }
+enum Result { FLAG_PULL, OUT_OF_BOUNDS, INCOMPLETE, INTERCEPTION, TOUCHDOWN, TIME_LIMIT }
 
 const MAX_DOWNS: int = 4
 const START_YARDS: float = 10.0
 const TOUCHDOWN_POINTS: int = 6
+const MAX_LIVE_SECONDS: int = 20
 
 var phase: Phase = Phase.PRE_SNAP
 var offense: int = 0
@@ -23,6 +24,7 @@ var ticks_per_second: int = 60
 var last_result: String = ""
 var pending_possession: bool = false
 var _next_spot: float = 0.0
+var live_ticks: int = 0
 
 
 func start_game(duration_seconds: int = 300, tick_rate: int = 60) -> void:
@@ -35,6 +37,7 @@ func start_game(duration_seconds: int = 300, tick_rate: int = 60) -> void:
 	ticks_remaining = maxi(0, duration_seconds) * ticks_per_second
 	last_result = ""
 	pending_possession = false
+	live_ticks = 0
 	_set_phase(Phase.PRE_SNAP if ticks_remaining > 0 else Phase.GAME_OVER)
 	changed.emit()
 
@@ -59,16 +62,25 @@ func snap() -> bool:
 	if phase != Phase.PRE_SNAP or ticks_remaining <= 0:
 		return false
 	last_result = ""
+	live_ticks = 0
 	_set_phase(Phase.LIVE_PLAY)
 	changed.emit()
 	return true
 
 
-func tick() -> void:
-	if phase != Phase.LIVE_PLAY or ticks_remaining <= 0:
+func tick(carrier_spot: Vector2 = Vector2(INF, INF)) -> void:
+	if phase != Phase.LIVE_PLAY:
 		return
-	ticks_remaining -= 1
+	ticks_remaining = maxi(0, ticks_remaining - 1)
+	live_ticks += 1
 	# Zero is a horn, not a mid-play cancellation: the live play may finish.
+	# The live-play cap also runs after the horn so that a final play cannot stall.
+	if live_ticks >= MAX_LIVE_SECONDS * ticks_per_second:
+		if carrier_spot.is_finite():
+			finish_play(Result.TIME_LIMIT, carrier_spot)
+		else:
+			finish_play(Result.INCOMPLETE, Vector2(line_of_scrimmage, FootballField.CENTER_Y))
+		return
 	changed.emit()
 
 
@@ -86,7 +98,7 @@ func finish_play(result: Result, spot: Vector2) -> bool:
 		return false
 	var direction: int = attack_direction()
 	var progress: float = FootballField.progress_yards(spot.x, direction)
-	if result == Result.FLAG_PULL and is_touchdown(spot):
+	if result in [Result.FLAG_PULL, Result.TIME_LIMIT] and is_touchdown(spot):
 		result = Result.TOUCHDOWN
 	# A requested score must actually reach the opponent goal in bounds.
 	if result == Result.TOUCHDOWN and not is_touchdown(spot):
@@ -105,7 +117,7 @@ func finish_play(result: Result, spot: Vector2) -> bool:
 				turnover_spot = FootballField.world_x_from_progress(START_YARDS, -direction)
 			_queue_change(turnover_spot)
 		_:
-			last_result = ["FLAG PULLED", "OUT OF BOUNDS", "INCOMPLETE / DROP"][result]
+			last_result = "PLAY LIMIT / DEAD BALL" if result == Result.TIME_LIMIT else ["FLAG PULLED", "OUT OF BOUNDS", "INCOMPLETE / DROP"][result]
 			if result != Result.INCOMPLETE:
 				line_of_scrimmage = clampf(spot.x, FootballField.GOAL_LEFT + 1, FootballField.GOAL_RIGHT - 1)
 			if result != Result.INCOMPLETE and progress <= 0.0:

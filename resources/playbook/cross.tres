@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="OffensivePlay" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/playbook/offensive_play.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Cross"
+description = "Two crossing routes through the middle. Lead the first break."
+receiver_one_route = PackedVector2Array(110, 0, 190, 65, 290, 65)
+receiver_two_route = PackedVector2Array(80, 0, 150, -65, 230, -65)
+ai_read_delay = 0.4
